@@ -30,20 +30,17 @@ const UserInput = (function(){
         keystate: k => keystate[k] || false
     }
 })()
-window.uit =UserInput
+
 
 
 /* - - - - CANVAS SUB-API - - - - */
 
 const CanvasArtist = (function(){
-    
-    var canvas,context
-    
+    var canvas,context, magnification = 1, xPos = 0, yPos = 0
     function resizeCanvas() {
         context.canvas.width = canvas.offsetWidth
         context.canvas.height = canvas.offsetHeight
     }
-    
     function init(event) {
         if (canvas) throw new Error("CanvasArtist module already initialized")
         canvas = document.getElementById("canvas")
@@ -51,13 +48,11 @@ const CanvasArtist = (function(){
         resizeCanvas()
         window.addEventListener("resize",resizeCanvas)
     }
-
     const reset = () => {
         context.setTransform(1,0,0,1,0,0)
         context.clearRect(0,0,context.canvas.width,context.canvas.height)
-        context.setTransform(1,0,0,-1,0,context.canvas.height)
+        context.setTransform(magnification,0,0,-magnification,xPos,context.canvas.height + yPos)
     }
-
     const fillRect = (x,y,X,Y,fillStyle) => {
         context.fillStyle = fillStyle
         context.fillRect(x,y,X,Y)
@@ -76,17 +71,25 @@ const CanvasArtist = (function(){
     const drawImage = (x,y,scale,image) => {
         context.drawImage(image, x, y)
     }
-    
     return {
         init:init,
         reset:reset,
+        pan: (x,y) => {
+            xPos += x/magnification
+            yPos += y/magnification
+        },
+        zoom: (m) => {
+            
+            magnification *= m
+        },
         fillRectangle:fillRect,
         outlineRectangle:strokeRect,
         fillCircle:fillCircle,
         drawImage:drawImage
     }
-    
 })()
+
+
 
 /* - - - - ENTITIES - - - - */
 
@@ -196,6 +199,32 @@ const Dungeon = (function(){
         }
     }
 
+    // -- player class
+
+    function Player() {
+        this.x = 0
+        this.y = 0
+        this.dx = 0
+        this.dy = 0
+        this.r = 4
+    }
+    Player.prototype.step = function() {
+        this.x += this.dx
+        this.y += this.dy
+        if (UserInput.keystate("w")) {
+            this.dy += 0.05
+        }
+        if (UserInput.keystate("s")) {
+            this.dy -= 0.05
+        }
+        if (UserInput.keystate("d")) {
+            this.dx += 0.05
+        }
+        if (UserInput.keystate("a")) {
+            this.dy -= 0.05
+        }
+    }
+
     // -- base classes
 
     function Entity(x,y) {
@@ -225,15 +254,18 @@ const Dungeon = (function(){
         this.move()
     }
 
-
-
-
     // -- module accessors
     return {
         spawn: (type,x,y) => {
             var entity = null
             switch(type.toLowerCase()) {
-                case "spacemite": entity = new SpaceMite(x,y)
+                case "player":
+                    entity = new Player()
+                    break
+                case "spacemite":
+                    entity = new SpaceMite(x,y)
+                    break
+                default: throw new Error("type not found")
             }
             state.entityIdSeed += 1
             entity.id = _base10Int_to_base62String(state.entityIdSeed)
@@ -241,15 +273,18 @@ const Dungeon = (function(){
             return entity
         },
         initAsync: new Promise( (resolve,reject) => {
-            // ** ASYNC IMAGE LOADING
-            fetch("https://raw.githubusercontent.com/joshualemli/terraform/master/images/SpaceMite.png")
-                .then(response => response.blob())
-                .then(blob => createImageBitmap(blob))
-                .then(imageBitmap => {
-                    SpaceMite.prototype.image = imageBitmap
-                    console.log(imageBitmap)
-                    resolve()
-                });
+            Promise.all([
+                new Promise( (resolve,reject) => {
+                    fetch("https://raw.githubusercontent.com/joshualemli/terraform/master/images/SpaceMite.png")
+                    .then( response => response.blob() )
+                    .then( blob => createImageBitmap(blob) )
+                    .then( imageBitmap => {
+                        SpaceMite.prototype.image = imageBitmap
+                        console.log(imageBitmap)
+                        resolve()
+                    })
+                })
+            ]).then(resolve)
         })
     }
 
@@ -261,13 +296,19 @@ const Dungeon = (function(){
 /* - - - - GAMEPLAY - - - - */
 
 const play = (performanceTime) => {
+    // user input
+    if (UserInput.keystate("=")) CanvasArtist.zoom(1.02)
+    else if (UserInput.keystate("-")) CanvasArtist.zoom(-1.02)
+    if (UserInput.keystate("ArrowUp")) CanvasArtist.pan(0,1)
+    else if (UserInput.keystate("ArrowDown")) CanvasArtist.pan(0,-1)
+    if (UserInput.keystate("ArrowRight")) CanvasArtist.pan(1,0)
+    else if (UserInput.keystate("ArrowLeft")) CanvasArtist.pan(-1,0)
+    // world
     entities.forEach( entity => entity.step() )
+    // canvas
     CanvasArtist.reset()
-    entities.forEach( entity => {
-        //if (Math.random() > 0.95) console.log(entity)
-        //CanvasArtist.fillCircle(entity.x,entity.y,entity.r,"#FF0000")
-        CanvasArtist.drawImage(entity.x,entity.y,0,entity.image)
-    } )
+    entities.forEach( entity => CanvasArtist.drawImage(entity.x,entity.y,0,entity.image) )
+    // loop
     window.requestAnimationFrame(play)
 }
 
@@ -284,7 +325,13 @@ const menu = () => {}
 const init = () => {
     window.removeEventListener("load",init)
 
-    Dungeon.initAsync.then( () => {
+    // wait for async init tasks
+    Promise.all([
+        Dungeon.initAsync
+    ]).then( () => {
+
+        var player = Dungeon.spawn("player")
+
         var foo = Dungeon.spawn("spaceMite",200,210)
         console.log(foo)
         entities.set(foo.id,foo)
