@@ -3,6 +3,24 @@ html,body {
     margin:0;padding:0;
     background-color:#000;
 }
+
+#menu {
+    position:fixed; top:0; left:0; z-index:40;
+    display:none;
+    width:100%;
+    height:100%;
+    color:white;
+    flex-direction:column;
+}
+    .menu-section {
+        margin:1em;
+        display:flex;
+        flex-direction:row;
+    }
+        .menu-section-item {
+            flex-direction:column;    
+        }
+
 #canvas {
     display:block;
     width:100%;height:100%;
