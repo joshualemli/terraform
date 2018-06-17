@@ -20,6 +20,11 @@ const normalizeVector = (v,m) => {
     }
     else return v
 }
+const hitTest = (xa,ya,xb,yb,D) => {
+    let dx = xa-xb
+    let dy = ya-yb
+    return Math.sqrt(dx*dx+dy*dy) < D
+}
 // id generating functions
 const _transmogrify = (digitInt) => {
     if (digitInt < 10) return digitInt.toString()
@@ -47,8 +52,6 @@ const _base10Int_to_base62String = (n) => {
 var State = {
     gameLoopIteration: 0,
     gamePaused: false,
-    menuActive: false,
-    playerPanelActive: true,
     entityIdSeed: 0,
     itemIdSeed: 0,
     spriteIdSeed: 0
@@ -73,27 +76,32 @@ const UserInput = (function(){
     var mouseX = 0, mouseY = 0
     document.addEventListener("keypress", event => {
         switch(event.key) {
-            case "q": toggleMenu()
-                break
+            // case "q": toggleMenu()
+            //     break
             case " ": State.gamePaused = !State.gamePaused
                 break
         }
     })
-    document.addEventListener("keydown", event => keystate[event.key] = true)
-    document.addEventListener("keyup", event => keystate[event.key] = false)
-    document.addEventListener("contextmenu", function(event) {
-        event.preventDefault();
-        return false;
-    }, false);
-    document.addEventListener("mousedown", event => keystate[`mouse${event.which}`] = true)
-    document.addEventListener("mouseup", event => keystate[`mouse${event.which}`] = false)
-    document.addEventListener("mousemove", event => {
-        let viewInfo = CanvasArtist.currentViewInfo()
-        mouseX = viewInfo.xPos - (viewInfo.xDim / 2) + (event.clientX / viewInfo.m)
-        mouseY = viewInfo.yPos + (viewInfo.yDim / 2) - (event.clientY / viewInfo.m)
-        if (keystate["m"]) console.log(mouseX,mouseY)
-    })
+    const init = () => {
+        // keys
+        document.addEventListener("keydown", event => keystate[event.key] = true )
+        document.addEventListener("keyup", event => keystate[event.key] = false )
+        // mouse/touch
+        document.addEventListener("mousemove", event => {
+            let viewInfo = CanvasArtist.currentViewInfo()
+            mouseX = viewInfo.xPos - (viewInfo.xDim / 2) + (event.clientX / viewInfo.m)
+            mouseY = viewInfo.yPos + (viewInfo.yDim / 2) - (event.clientY / viewInfo.m)
+        })
+        document.addEventListener("contextmenu", function(event) {
+            event.preventDefault();
+            return false;
+        }, false);
+        document.getElementById("canvas").addEventListener("mousedown", event => keystate[`mouse${event.which}`] = true )
+        document.getElementById("canvas").addEventListener("mouseup", event => keystate[`mouse${event.which}`] = false )
+    }
+    // public accessor
     return {
+        init:init,
         keystate: k => keystate[k] || false,
         mouse: () => new Object({x:mouseX,y:mouseY})
     }
@@ -104,16 +112,14 @@ const UserInput = (function(){
 
 const PlayerPanel = (function(){
 
-    var itemElements = new Map()
-    const addItemElement = (item) => {
-        let container = document.createElement("div")
+    // var itemElements = new Map()
+    // const addItemElement = (item) => {
+    //     let container = document.createElement("div")
 
-    }
+    // }
 
-    return {
-        addItem: (item) => {
+    return function(show) {
 
-        }
     }
 })()
 
@@ -157,6 +163,15 @@ const CanvasArtist = (function(){
         context.arc(x,y,r,0,Math.PI * 2,true)
         context.fill()
     }
+    const strokePolyline = (points,thickness,strokeStyle) => {
+        context.strokeStyle = strokeStyle
+        context.lineWidth = thickness
+        context.beginPath()
+        context.moveTo(points[0][0],points[0][1])
+        let arrLen = points.length
+        for (var i = 1; i < points.length; i += 1) context.lineTo(points[i][0],points[i][1])
+        context.stroke()
+    }
     const strokeLine = (x0,y0,x1,y1,thickness,strokeStyle) => {
         context.strokeStyle = strokeStyle
         context.lineWidth = thickness
@@ -175,8 +190,8 @@ const CanvasArtist = (function(){
         init:init,
         reset:reset,
         worldTransform:worldTransform,
-        panX: (dx) => xPos += 5 * dx,
-        panY: (dy) => yPos += 5 * dy,
+        panX: (dx) => xPos += dx / magnification,
+        panY: (dy) => yPos += dy / magnification,
         zoom: (multiplier) => magnification *= multiplier,
         currentViewInfo: () => new Object({
             xDim: xDimPx/magnification,
@@ -191,6 +206,7 @@ const CanvasArtist = (function(){
         outlineRectangle:strokeRect,
         fillCircle:fillCircle,
         drawImage:drawImage,
+        polyline:strokePolyline,
         line:strokeLine
     }
 })()
@@ -247,14 +263,14 @@ const SpatialHash = (function(){
     }
     const getNeighborsSimple = (x,y) => {
         let splitSize = CELL_SIZE / 2
-        let xAdd = (x % CELL_SIZE > splitSize) ? 1 : -1
-        let yAdd = (y % CELL_SIZE > splitSize) ? 1 : -1
+        let xAdd = (x % CELL_SIZE > Math.sign(x)*splitSize) ? 1 : -1
+        let yAdd = (y % CELL_SIZE > Math.sign(y)*splitSize) ? 1 : -1
         let idsArr = []
         let X = hash(x)
         let Y = hash(y)
         new Array( [X,Y], [X+xAdd,Y], [X,Y+yAdd], [X+xAdd,Y+yAdd]).forEach( XY => {
             var set = getSet(XY[0],XY[1])
-            if (set) idsArr.push(...set.values())
+            if (set) set.forEach( v => idsArr.push(v) )
         })
         return idsArr
     }
@@ -269,23 +285,38 @@ const SpatialHash = (function(){
 })()
 
 const SpriteFactory = (function(){
-    function ShatterBeam(x0,y0,x1,y1,color) {
-        this.x0 = x0
-        this.y0 = y0
-        this.x1 = x1
-        this.y1 = y1
-        this.color = color
+    function ShatterBeam(props) {
+        this.x0 = props.x0
+        this.y0 = props.y0
+        this.x1 = props.x1
+        this.y1 = props.y1
+        this.strColor = props.color.join(",")
+        this.arrColorAddSafe = props.color.map(n=>n>155?155:(n<100?100:n))
+        this.beamRadius = props.radius
     }
     ShatterBeam.prototype.draw = function() {
-        let i = Math.floor(Math.random()*4)
-        for (i; i--;) CanvasArtist.line(
+        var i
+        for (i = Math.floor(Math.random()*4); i--;) CanvasArtist.line(
             this.x0,
             this.y0,
-            this.x1-4+Math.random()*8,
-            this.y1-4+Math.random()*8,
+            this.x1 - (Math.random() - 0.5) * this.beamRadius*2,
+            this.y1 - (Math.random() - 0.5) * this.beamRadius*2,
             1,
-            `rgba(${ this.color.join(",") })`
+            `rgba(${this.strColor},${Math.round(5+Math.random()*5)/10})`
         )
+        let dx = (this.x1-this.x0)/10
+        let dy = (this.y1-this.y0)/10
+        let devMult = Math.sqrt(dx*dx+dy*dy)
+        let devAdd = devMult / 2
+        let points = [[this.x0,this.y0]]
+        for (i = 1; i < 11; i++) points.push([this.x0 + i*dx + (Math.random()*devMult-devAdd), this.y0 + i*dy + (Math.random()*devMult-devAdd)])
+        CanvasArtist.polyline(points,1,`rgb(${this.arrColorAddSafe.map(n=>n+Math.floor(Math.random()*200-100)).join(",")})`)
+
+        // CanvasArtist.fillCircle(
+        //     this.x1, this.y1,
+        //     this.beamRadius * (Math.random()*0.4+0.7),
+        //     `rgba(${this.spotColor.map(n=> n + Math.floor(Math.random()*110 - 55) ).join(",")},${Math.floor(Math.random()*3)/10})`
+        // )
         Sprites.delete(this.id)
     }
     return {
@@ -293,7 +324,7 @@ const SpriteFactory = (function(){
             let sprite = null
             switch(type.toLowerCase()) {
                 case "shatterbeam":
-                    sprite = new ShatterBeam(props.x0,props.y0,props.x1,props.y1,props.color)
+                    sprite = new ShatterBeam(props)
                     break
             }
             State.spriteIdSeed += 1
@@ -314,58 +345,75 @@ const ItemFactory = (function(){
     //  func:report - allows update of firing status (temperature,ammo,charge, etc)
 
     function ShatterRay() {
-        this.range = 100
+        this.range = 200
+        this.hitRadius = 8
         this.cooldownRate = 0.5
         this.heatupRate = 1
         this.t = 0 // "temperature"
-        this.tSafe = 55
-        this.tMax = 90
+        this.tSafe = 50
+        this.tMax = 100
         this.firing = false
+        this.damagePerHit = 0.05
         this.owner = null
     }
-    ShatterRay.prototype.report = function() {
+    ShatterRay.prototype.report = function(viewInfo) {
         let tPerc = this.t/this.tMax
         let values = []
         let tSafePerc = this.tSafe/this.tMax
+        let barXDimPx = viewInfo.xDimPx / 5 + 8
+        let barYPosPx = viewInfo.yDimPx-32
         if (tPerc < tSafePerc) {
-            if (tPerc == 0) values.push(["#00FF00",0,tSafePerc])
+            if (tPerc == 0) CanvasArtist.fillRectangle(8, barYPosPx, tSafePerc*barXDimPx, 3, "#00FF00")
             else {
-                values.push(["#0000FF",0,tPerc])
-                values.push(["#00FF00",tPerc,tSafePerc])
+                CanvasArtist.fillRectangle(8, barYPosPx, tPerc*barXDimPx, 3, "#0000FF")
+                CanvasArtist.fillRectangle(tPerc*barXDimPx+8, barYPosPx, (tSafePerc-tPerc)*barXDimPx, 3,"#00FF00")
             }
-            values.push(["#FFFF00",tSafePerc,1])
+            CanvasArtist.fillRectangle( tSafePerc*barXDimPx+8, barYPosPx, (1-tSafePerc)*barXDimPx, 3, "#FFFF00")
         }
         else {
-            values.push(["#0000FF",0,tPerc])
-            values.push(["#FF0000",tPerc,1])
+            CanvasArtist.fillRectangle( 8, barYPosPx, tPerc*barXDimPx, 3, "#0000FF")
+            CanvasArtist.fillRectangle( tPerc*barXDimPx+8, barYPosPx, (1-tPerc)*barXDimPx, 3, "#FF0000")
         }
-        return values
     }
     ShatterRay.prototype.stats = function(update) {
         return [
             {name:"Range",key:"range",value:this.range},
-            {name:"Heat Dissipation",key:"cooldownRate",value:this.range},
-            {name:"Heat Generation",key:"heatupRate",value:this.range},
-            {name:"Safe Ignition Temperature",key:"tSafe",value:this.range},
-            {name:"Max Sustained Firing Temperature",key:"tMax",value:this.range},
+            {name:"Damange Rate",key:"damagePerHit",value:this.damagePerHit},
+            {name:"Heat Dissipation",key:"cooldownRate",value:cooldownRate},
+            {name:"Heat Generation",key:"heatupRate",value:this.heatupRate},
+            {name:"Safe Ignition Temperature",key:"tSafe",value:this.tSafe},
+            {name:"Max Sustained Firing Temperature",key:"tMax",value:this.tMax},
         ]
     }
     ShatterRay.prototype.fire = function(x,y) {
+        let killExperience = 0
+        // fire!
         if ((this.firing && this.t < this.tMax) || this.t < this.tSafe) {
             this.firing = true
             this.t += this.heatupRate
             let beamProps = {
                 x0:this.owner.x, y0:this.owner.y,
                 x1:x, y1:y,
-                color: [255,0,0,1]
+                color: [0,255,0],
+                radius: this.hitRadius
             }
             let dD = [beamProps.x1-beamProps.x0, beamProps.y1-beamProps.y0]
             dD = normalizeVector(dD,this.range)
             beamProps.x1 = beamProps.x0 + dD[0]
             beamProps.y1 = beamProps.y0 + dD[1]
             SpriteFactory.spawn("ShatterBeam",beamProps)
+            // hit test
+            SpatialHash.getNeighbors(beamProps.x1,beamProps.y1).forEach( eid => {
+                if (eid === this.owner.id) return
+                var entity = Entities.get(eid)
+                if (hitTest(entity.x,entity.y,beamProps.x1,beamProps.y1,entity.r+this.hitRadius)) {
+                    killExperience += entity.takeDamage(this.damagePerHit)
+                }
+            })
         }
+        // temperature is too high
         else this.firing = false
+        return killExperience
     }
     ShatterRay.prototype.step = function() {
         if (!this.firing) {
@@ -440,46 +488,55 @@ const Dungeon = (function(){
 
     // -- base classes
 
-    function Entity(x,y,r,rMax) {
+    function Entity(x,y,r) {
         this.x = x
         this.y = y
         this.r = r
-        this.rMax = rMax
-    }
-    Entity.prototype.grow = function(sqUnits) {
-        this.rMax = Math.sqrt( ((Math.PI * this.rMax * this.rMax) + sqUnits) / Math.PI )
-    }
-    Entity.prototype.heal = function(sqUnits) {
-        this.r = Math.sqrt( ((Math.PI * this.r * this.r) + sqUnits) / Math.PI )
-        if (this.r > this.rMax) this.r = this.rMax
-    }
-    Entity.prototype.takeDamage = function(sqUnits) {
-        this.r = Math.sqrt( ((Math.PI * this.r * this.r) - sqUnits) / Math.PI )
-        if (this.r < 1) this.perish()
     }
     Entity.prototype.perish = function() {
-        Entities.delete(id)
+        Entities.delete(this.id)
         SpatialHash.remove(this.id)
         if (!Mortuary[this.name]) Mortuary[this.name] = 1
         else Mortuary[this.name] += 1
         console.log(`AAAAAaaarrbllchfff...gasp!  Entity id:${this.id} perished.`)
+        return Math.round(Math.sqrt(this.r+1)*10)/10
     }
 
     // -- specialized classes
+    //     - takeDamage: returns xp for kill if entity perishes
 
     function SpaceMite(x,y) {
         Entity.call(this,x,y,4)
         enable_movement.call(this)
+        this.target = null
     }
     Object.assign(SpaceMite.prototype,Entity.prototype)
     enable_movement.call(SpaceMite)
     SpaceMite.prototype.name = "SpaceMite"
+    SpaceMite.prototype.neuronCount = 100
     SpaceMite.prototype.step = function() {
-        if (Math.random() > 0.95) {
-            // this.dx = Math.random()*2 - 1
-            // this.dy = Math.random()*2 - 1
+        // if (this.target == null && Math.random()
+        let eids = SpatialHash.getNeighbors(this.x,this.y)
+        for (var i = eids.length; i--;) {
+            var eid = eids[i]
+            if (eid === this.id) continue
+            var entity = Entities.get(eid)
+            //console.log(entity.x,entity.y, this.x, this.y, this.r + entity.r)
+            if (hitTest(entity.x,entity.y, this.x, this.y, this.r + entity.r)) {
+                this.target = entity
+                break
+            }
+        }
+        if (Math.random() > 0.99) {
+            this.dx = Math.random()*0.5 - 0.25
+            this.dy = Math.random()*0.5 - 0.25
         }
         this.move()
+    }
+    SpaceMite.prototype.takeDamage = function(sqUnits) {
+        this.r = Math.sqrt( ((Math.PI * this.r * this.r) - sqUnits*10) / Math.PI )
+        if (this.r < 2) return this.perish()
+        return 0
     }
     SpaceMite.prototype._imageBitmapPath = "https://raw.githubusercontent.com/joshualemli/terraform/master/images/SpaceMite.png"
 
@@ -491,18 +548,18 @@ const Dungeon = (function(){
         this.dy = 0
         this.brakingForce = 0.96
         this.dDdtMax = 0.1
+        this.experience = 0
+        this.rank = 1
         enable_inventory.call(this,2)
+        enable_movement.call(this)
     }
     Object.assign(Player.prototype,Entity.prototype)
     enable_inventory.call(Player)
+    enable_movement.call(Player)
     Player.prototype.step = function() {
         this.move()
         this.userInput()
         this.items.forEach( item => item.step() )
-    }
-    Player.prototype.move = function() {
-        this.x += this.dx
-        this.y += this.dy
     }
     Player.prototype.userInput = function() {
         let mouse = UserInput.mouse()
@@ -523,20 +580,20 @@ const Dungeon = (function(){
                 accel = [mouse.x - this.x, mouse.y - this.y]
             }
             // keys
-            else {
-                if (UserInput.keystate("w")) {
-                    accel[1] += this.dDdtMax
-                }
-                else if (UserInput.keystate("s")) {
-                    accel[1] -= this.dDdtMax
-                }
-                if (UserInput.keystate("d")) {
-                    accel[0] += this.dDdtMax
-                }
-                if (UserInput.keystate("a")) {
-                    accel[0] -= this.dDdtMax
-                }
-            }
+            // else {
+            //     if (UserInput.keystate("w")) {
+            //         accel[1] += this.dDdtMax
+            //     }
+            //     else if (UserInput.keystate("s")) {
+            //         accel[1] -= this.dDdtMax
+            //     }
+            //     if (UserInput.keystate("d")) {
+            //         accel[0] += this.dDdtMax
+            //     }
+            //     if (UserInput.keystate("a")) {
+            //         accel[0] -= this.dDdtMax
+            //     }
+            // }
             accel = normalizeVector(accel,this.dDdtMax)
             this.dx += accel[0]
             this.dy += accel[1]
@@ -544,11 +601,11 @@ const Dungeon = (function(){
         // - - - ITEM USE - - -
         if (UserInput.keystate("mouse1")) {
             this.items.forEach( item => {
-                if (item.category === "weapon") item.fire(mouse.x,mouse.y)
+                if (item.category === "weapon") this.experience += item.fire(mouse.x,mouse.y)
             })
         }
     }
-    Player.prototype._imageBitmapPath = "https://raw.githubusercontent.com/joshualemli/terraform/master/images/SpaceMite.png"
+    Player.prototype._imageBitmapPath = "https://raw.githubusercontent.com/joshualemli/terraform/master/images/Player_v1.png"
 
 
     // -- module accessors
@@ -594,42 +651,37 @@ const Dungeon = (function(){
 const play = (performanceTime) => {
 
     // pan and zoom
-    if (UserInput.keystate("=")) CanvasArtist.zoom(1.02)
-    else if (UserInput.keystate("-")) CanvasArtist.zoom(0.98)
-    if (UserInput.keystate("ArrowUp")) CanvasArtist.panY(1)
-    else if (UserInput.keystate("ArrowDown")) CanvasArtist.panY(-1)
-    if (UserInput.keystate("ArrowRight")) CanvasArtist.panX(1)
-    else if (UserInput.keystate("ArrowLeft")) CanvasArtist.panX(-1)
+    if (UserInput.keystate("e")) CanvasArtist.zoom(1.02)
+    else if (UserInput.keystate("q")) CanvasArtist.zoom(0.98)
+    if (UserInput.keystate("w")) CanvasArtist.panY(10)
+    else if (UserInput.keystate("s")) CanvasArtist.panY(-10)
+    if (UserInput.keystate("d")) CanvasArtist.panX(10)
+    else if (UserInput.keystate("a")) CanvasArtist.panX(-10)
 
     // step
-    if (!State.gamePaused) {
-        State.gameLoopIteration += 1
-        Entities.forEach( entity => entity.step() )
-    }        
+    State.gameLoopIteration += 1
+    Entities.forEach( entity => entity.step() )
 
     // draw
     CanvasArtist.reset()
     let viewInfo = CanvasArtist.currentViewInfo()
-    // TO DO: implement spatial culling
-    Entities.forEach( entity => CanvasArtist.drawImage(entity.image,entity.x,entity.y,entity.r) )
+    Entities.forEach( entity => {
+        if (
+            entity.x+entity.r > viewInfo.xPos-viewInfo.xDim/2 && entity.x-entity.r < viewInfo.xPos+viewInfo.xDim/2 &&
+            entity.y+entity.r > viewInfo.yPos-viewInfo.yDim/2 && entity.y-entity.r < viewInfo.yPos+viewInfo.yDim/2
+        ) CanvasArtist.drawImage(entity.image,entity.x,entity.y,entity.r)
+    })
     Sprites.forEach( sprite => sprite.draw() )
     CanvasArtist.worldTransform(false)
-    Entities.get(State.playerId).items.forEach( (item,index) => {
-        item.report().forEach( (colorBreaksArr) => {
-            // if (Math.random()>0.95) console.log(viewInfo)
-            CanvasArtist.fillRectangle(
-                colorBreaksArr[1] * viewInfo.xDimPx / 10,
-                viewInfo.yDimPx - 4 * index,
-                (colorBreaksArr[2]-colorBreaksArr[1]) * viewInfo.xDimPx / 10,
-                3,
-                colorBreaksArr[0]
-            )
-        })
-    } )
+    Entities.get(State.playerId).items.forEach( (item) => item.report(viewInfo) )
+
+    if (State.gameLoopIteration % 128 === 0) {
+        console.log(performance.now()-performanceTime)
+        if (Math.random() > 0.9) console.clear()
+    }
 
     // loop
-    if (UserInput.keystate("t")) console.log(performance.now() - performanceTime)
-    window.requestAnimationFrame(play)
+    if (!State.gamePaused) window.requestAnimationFrame(play)
 }
 
 
@@ -649,23 +701,17 @@ const init = () => {
         Dungeon.initAsync
     ]).then( () => {
 
+        UserInput.init()
         CanvasArtist.init()
 
         // *** spawn player ***
         var player = Dungeon.spawn("player")
         State.playerId = player.id
         player.pickupItem( ItemFactory.spawn("ShatterRay") )
-        // player.pickupItem( ItemFactory.spawn("ShatterRay") )
-        console.log(player)
+        window.player = player
 
-        
-        var foo = Dungeon.spawn("spaceMite",200,200)
-        var foo = Dungeon.spawn("spaceMite",-200,200)
-        var foo = Dungeon.spawn("spaceMite",200,-200)
-        var foo = Dungeon.spawn("spaceMite",-200,-200)
-    
-    
-        console.log("init :: starting gameplay")
+        for (var nm = 20; nm--;) Dungeon.spawn("spaceMite",(Math.random()-0.5)*1000,(Math.random()-0.5)*1000)
+
         play()
 
     })

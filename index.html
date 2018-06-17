@@ -5,20 +5,15 @@
         <script src="terraform.js"></script>
     </head>
     <body>
-        <div id="menu">
-            <div class="menu-section">
-                <div class="menu-section" style="flex:1 1 auto;justify-content:center;align-items:center;">
-                        MENU OPACITY
-                </div>
-                <div class="menu-section" style="flex:5 1 auto;justify-content:center;align-items:center;">
-                    <input
-                        type='range'
-                        style="width:100%;"
-                        oninput="document.getElementById('menu').style.opacity = parseFloat(this.value).toFixed(2)"
-                        max="1" min="0.3" step="any" value="1"
-                    >
-                </div>
-            </div>
+        <div id="player"></div>
+        <div id="factory"></div>
+        <div id="gameplayUI">
+            <div class="gameplayUI-item" id="gameplayUI-zoomIn"></div>
+            <div class="gameplayUI-item" id="gameplayUI-zoomOut"></div>
+            <div class="gameplayUI-item" id="gameplayUI-toggleClickAction"></div>
+            <div class="gameplayUI-item" id="gameplayUI-brake"></div>
+            <div class="gameplayUI-item" id="gameplayUI-openPlayerPanel"></div>
+            <div class="gameplayUI-item" id="gameplayUI-openFactory"></div>
         </div>
         <canvas id="canvas">HTML5 Canvas element not supported.  Use google chome, mozilla firefox, or microsoft edge.</canvas>
     </body>

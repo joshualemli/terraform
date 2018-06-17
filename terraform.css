@@ -1,37 +1,47 @@
 html,body {
-    width:100%;height:100%;
-    margin:0;padding:0;
+    width:100%;
+    height:100%;
+    margin:0;
+    padding:0;
     background-color:black;
     color:white;
 }
 
-#menu {
-    position:fixed; top:0; left:0; z-index:40;
-    display:none;
-    width:100%;
-    height:100%;
-    background:rgba(0,100,200,0.5);
-    flex-direction:column;
-}
-    .menu-section {
-        margin:1em;
-        display:flex;
-        flex-direction:row;
-    }
-        .menu-section-item {
-            flex-direction:column;    
-        }
-
-
-#playerInfo {
-    position:fixed; bottom:0;
-    overflow:hidden;
-    border:1px solid #000;
-}
-
-
 #canvas {
+    z-index:2;
+    position:fixed;
+    top:0; left:0;
     display:block;
     width:100%;height:100%;
     margin:0;padding:0;
+    cursor:crosshair;
+}
+
+.gameplayUI-item {
+    z-index:10;
+    position:fixed;
+    right:1vmin;
+    width:10vmin;
+    height:10vmin;
+    background:#333;
+    border-radius:2px;
+}
+
+#gameplayUI-zoomIn {
+    top:1vmin;
+}
+#gameplayUI-zoomOut {
+    top:12vmin;
+}
+#gameplayUI-toggleClickAction {
+    top:23vmin;
+}
+#gameplayUI-brake {
+    top:34vmin;
+}
+#gameplayUI-openPlayerPanel {
+    top:45vmin;
+}
+#gameplayUI-openFactory {
+    top:56vmin;
 }
