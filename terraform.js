@@ -127,17 +127,10 @@ const PlayerPanel = (function(){
 /* - - - - CANVAS SUB-API - - - - */
 
 const CanvasArtist = (function(){
-    var canvas,context, magnification = 1, xPos = 0, yPos = 0, xDimPx = 0, yDimPx = 0
+    var canvas,context, magnification = 1, xPos = 0, yPos = 0, xDimPx = 0, yDimPx = 0, backgroundImage = null
     function resizeCanvas() {
         context.canvas.width = xDimPx = canvas.offsetWidth
         context.canvas.height = yDimPx = canvas.offsetHeight
-    }
-    function init(event) {
-        if (canvas) throw new Error("CanvasArtist module already initialized")
-        canvas = document.getElementById("canvas")
-        context = canvas.getContext("2d")
-        resizeCanvas()
-        window.addEventListener("resize",resizeCanvas)
     }
     const worldTransform = useWorld => {
         if (useWorld) context.setTransform(magnification,0,0,-magnification, xDimPx/2 - xPos*magnification, yPos*magnification + yDimPx/2)
@@ -145,7 +138,8 @@ const CanvasArtist = (function(){
     }
     const reset = () => {
         context.setTransform(1,0,0,1,0,0)
-        context.clearRect(0,0,xDimPx,yDimPx)
+        // context.clearRect(0,0,xDimPx,yDimPx)
+        context.drawImage(backgroundImage,-xDimPx/2-xPos,yPos-yDimPx/2,xDimPx*2+4*magnification,yDimPx*2+4*magnification)
         worldTransform(true)
     }
     const fillRect = (x,y,X,Y,fillStyle) => {
@@ -183,11 +177,47 @@ const CanvasArtist = (function(){
     const drawImage = (image,x,y,r) => {
         let L = r*2
         context.drawImage(image, x-r, y-r, L, L)
-        // context.fillStyle = "#FFFFFF"
-        // context.fillRect(x-r,y-r,L,L)
     }
+    const createBackgroundImage = (resolve) => {
+        let tempCanvas = document.createElement("canvas")
+        document.body.appendChild(tempCanvas)
+        let tempContext = tempCanvas.getContext("2d")
+        tempCanvas.style.width = tempCanvas.style.height = 128
+        tempContext.canvas.width = tempContext.canvas.height = 128
+        var px,py
+        // let f_xy_R = (x,y) => Math.sin(x*y*0.033561125 / ( Math.sin(x)+1.5 ) )
+        // let f_xy_B = (x,y) => 0.115 * (Math.cos(x*y*0.1) + Math.sin(x) + Math.sin(y) + 3)
+        let f_xy_R = (x,y) => 0.5 * (Math.sin(x*y*0.033561125 / ( Math.sin(x)+1.5 ) ) + 1)
+        let f_xy_B = (x,y) => 0.115 * (Math.cos(x*y*0.1) + Math.sin(x) + Math.sin(y) + 3)
+        for (px=128;px--;) {
+            for (py=128;py--;) {
+                tempContext.fillStyle = "rgb("+[f_xy_R(px,py) * 40, f_xy_R(px,py)*f_xy_B(px,py)*20 ,f_xy_B(px,py) * 40].join(",")+")"
+                // tempContext.fillStyle = "rgb("+[f_xy_R(px,py) * 40, f_xy_R(px,py)*f_xy_B(px,py)*40 , 201].join(",")+")"
+                tempContext.fillRect(px,py,1,1)
+            }
+        }
+        backgroundImage = document.createElement("img")
+        backgroundImage.style.width = backgroundImage.style.height = 128
+        backgroundImage.src = tempCanvas.toDataURL()
+        backgroundImage.onload = function() {
+            createImageBitmap(backgroundImage, 0, 0, 128,128).then( bitmap => {
+                backgroundImage = bitmap
+                document.body.removeChild(tempCanvas)
+                resolve()
+            })
+        }
+    }
+    const initAsync = () => new Promise( (resolve,reject) => {
+        if (canvas) throw new Error("CanvasArtist module already initialized")
+        canvas = document.getElementById("canvas")
+        context = canvas.getContext("2d")
+        resizeCanvas()
+        window.addEventListener("resize",resizeCanvas)
+        createBackgroundImage(resolve)
+    })
+
     return {
-        init:init,
+        initAsync:initAsync,
         reset:reset,
         worldTransform:worldTransform,
         panX: (dx) => xPos += dx / magnification,
@@ -547,7 +577,7 @@ const Dungeon = (function(){
         this.dx = 0
         this.dy = 0
         this.brakingForce = 0.96
-        this.dDdtMax = 0.1
+        this.dDdtMax = 0.025
         this.experience = 0
         this.rank = 1
         enable_inventory.call(this,2)
@@ -576,25 +606,8 @@ const Dungeon = (function(){
         else {
             let accel = [0,0]
             // mouse
-            if (UserInput.keystate("mouse3")) {
-                accel = [mouse.x - this.x, mouse.y - this.y]
-            }
-            // keys
-            // else {
-            //     if (UserInput.keystate("w")) {
-            //         accel[1] += this.dDdtMax
-            //     }
-            //     else if (UserInput.keystate("s")) {
-            //         accel[1] -= this.dDdtMax
-            //     }
-            //     if (UserInput.keystate("d")) {
-            //         accel[0] += this.dDdtMax
-            //     }
-            //     if (UserInput.keystate("a")) {
-            //         accel[0] -= this.dDdtMax
-            //     }
-            // }
-            accel = normalizeVector(accel,this.dDdtMax)
+            if (UserInput.keystate("mouse3")) {accel = normalizeVector([mouse.x - this.x, mouse.y - this.y],this.dDdtMax)
+            console.log(Math.sqrt(accel[0]*accel[0]+accel[1]*accel[1]))}
             this.dx += accel[0]
             this.dy += accel[1]
         }
@@ -605,7 +618,7 @@ const Dungeon = (function(){
             })
         }
     }
-    Player.prototype._imageBitmapPath = "https://raw.githubusercontent.com/joshualemli/terraform/master/images/Player_v1.png"
+    Player.prototype._imageBitmapPath = "https://raw.githubusercontent.com/joshualemli/terraform/master/images/Player_v2.png"
 
 
     // -- module accessors
@@ -628,7 +641,7 @@ const Dungeon = (function(){
             SpatialHash.add(entity.id,entity.x,entity.y)
             return entity
         },
-        initAsync: Promise.all(
+        initAsync: () => Promise.all(
             [Player,SpaceMite].map( proto => new Promise( (resolve,reject) => {
                 let exampleProto = new proto()
                 fetch( exampleProto._imageBitmapPath )
@@ -698,11 +711,11 @@ const init = () => {
 
     // wait for async init tasks
     Promise.all([
-        Dungeon.initAsync
+        Dungeon.initAsync(),
+        CanvasArtist.initAsync()
     ]).then( () => {
 
         UserInput.init()
-        CanvasArtist.init()
 
         // *** spawn player ***
         var player = Dungeon.spawn("player")
