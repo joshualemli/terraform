@@ -182,9 +182,9 @@ const CanvasArtist = (function(){
     }
     const drawImage = (image,x,y,r) => {
         let L = r*2
-        // context.drawImage(image, x-r, y-r, L, L)
-        context.fillStyle = "#FFFFFF"
-        context.fillRect(x-r,y-r,L,L)
+        context.drawImage(image, x-r, y-r, L, L)
+        // context.fillStyle = "#FFFFFF"
+        // context.fillRect(x-r,y-r,L,L)
     }
     return {
         init:init,
@@ -350,8 +350,8 @@ const ItemFactory = (function(){
         this.cooldownRate = 0.5
         this.heatupRate = 1
         this.t = 0 // "temperature"
-        this.tSafe = 50
-        this.tMax = 100
+        this.tSafe = 300
+        this.tMax = 310
         this.firing = false
         this.damagePerHit = 0.05
         this.owner = null
