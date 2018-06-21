@@ -137,10 +137,14 @@ const CanvasArtist = (function(){
         else context.setTransform(1,0,0,1,0,0)
     }
     const reset = () => {
-        context.setTransform(1,0,0,1,0,0)
-        // context.clearRect(0,0,xDimPx,yDimPx)
-        context.drawImage(backgroundImage,-xDimPx/2-xPos,yPos-yDimPx/2,xDimPx*2+4*magnification,yDimPx*2+4*magnification)
+        // context.setTransform(1,0,0,1,0,0)
+        // context.drawImage(backgroundImage,-xDimPx/2-xPos,yPos-yDimPx/2,xDimPx*2+4*magnification,yDimPx*2+4*magnification)
+        // context.drawImage(backgroundImage,-xDimPx/2-xPos,yPos-yDimPx/2,xDimPx*2+4*magnification,yDimPx*2+4*magnification)
         worldTransform(true)
+        context.fillStyle = backgroundImage
+        context.fillRect(
+            xPos - xDimPx/magnification/2, yPos - yDimPx/magnification/2, xDimPx/magnification, yDimPx/magnification
+        )
     }
     const fillRect = (x,y,X,Y,fillStyle) => {
         context.fillStyle = fillStyle
@@ -178,34 +182,44 @@ const CanvasArtist = (function(){
         let L = r*2
         context.drawImage(image, x-r, y-r, L, L)
     }
-    const createBackgroundImage = (resolve) => {
+    const _createBackgroundImage = (resolve) => {
+        let dim = 512
         let tempCanvas = document.createElement("canvas")
         document.body.appendChild(tempCanvas)
         let tempContext = tempCanvas.getContext("2d")
-        tempCanvas.style.width = tempCanvas.style.height = 128
-        tempContext.canvas.width = tempContext.canvas.height = 128
+        tempCanvas.style.width = tempCanvas.style.height = dim
+        tempContext.canvas.width = tempContext.canvas.height = dim
         var px,py
         // let f_xy_R = (x,y) => Math.sin(x*y*0.033561125 / ( Math.sin(x)+1.5 ) )
         // let f_xy_B = (x,y) => 0.115 * (Math.cos(x*y*0.1) + Math.sin(x) + Math.sin(y) + 3)
-        let f_xy_R = (x,y) => 0.5 * (Math.sin(x*y*0.033561125 / ( Math.sin(x)+1.5 ) ) + 1)
-        let f_xy_B = (x,y) => 0.115 * (Math.cos(x*y*0.1) + Math.sin(x) + Math.sin(y) + 3)
+        // let f_xy_R = (x,y) => 0.5 * (Math.sin(x*y*0.033561125 / ( Math.sin(x)+1.5 ) ) + 1)
+        // let f_xy_B = (x,y) => 0.115 * (Math.cos(x*y*0.1) + Math.sin(x) + Math.sin(y) + 3)
+        tempContext.fillStyle = "#000000"
+        tempContext.fillRect(0,0,dim,dim)
         for (px=128;px--;) {
             for (py=128;py--;) {
-                tempContext.fillStyle = "rgb("+[f_xy_R(px,py) * 40, f_xy_R(px,py)*f_xy_B(px,py)*20 ,f_xy_B(px,py) * 40].join(",")+")"
+                // tempContext.fillStyle = "rgb("+[f_xy_R(px,py) * 100, 0 ,f_xy_B(px,py) * 40].join(",")+")"
                 // tempContext.fillStyle = "rgb("+[f_xy_R(px,py) * 40, f_xy_R(px,py)*f_xy_B(px,py)*40 , 201].join(",")+")"
-                tempContext.fillRect(px,py,1,1)
+                // tempContext.fillStyle = `rgb(${[Math.floor(Math.random()*55),Math.floor(Math.random()*55),Math.floor(Math.random()*55)]})`
+                // tempContext.fillRect(px,py,1,1)
+                tempContext.fillStyle = `rgb(${[Math.floor(Math.random()*128)+128,Math.floor(Math.random()*128)+128,Math.floor(Math.random()*128)+128]})`
+                tempContext.fillRect( Math.random()*dim, Math.random()*dim, 1, 1 )
             }
         }
         backgroundImage = document.createElement("img")
         backgroundImage.style.width = backgroundImage.style.height = 128
         backgroundImage.src = tempCanvas.toDataURL()
         backgroundImage.onload = function() {
-            createImageBitmap(backgroundImage, 0, 0, 128,128).then( bitmap => {
-                backgroundImage = bitmap
-                document.body.removeChild(tempCanvas)
-                resolve()
-            })
+            backgroundImage = tempContext.createPattern(backgroundImage,"repeat")
+            console.log(backgroundImage)
+            // createImageBitmap(backgroundImage, 0, 0, 128,128).then( bitmap => {
+            //     backgroundImage = bitmap
+            //     document.body.removeChild(tempCanvas)
+            //     resolve()
+            // })
+            resolve()
         }
+        document.body.removeChild(tempCanvas)
     }
     const initAsync = () => new Promise( (resolve,reject) => {
         if (canvas) throw new Error("CanvasArtist module already initialized")
@@ -213,7 +227,7 @@ const CanvasArtist = (function(){
         context = canvas.getContext("2d")
         resizeCanvas()
         window.addEventListener("resize",resizeCanvas)
-        createBackgroundImage(resolve)
+        _createBackgroundImage(resolve)
     })
 
     return {
@@ -606,8 +620,7 @@ const Dungeon = (function(){
         else {
             let accel = [0,0]
             // mouse
-            if (UserInput.keystate("mouse3")) {accel = normalizeVector([mouse.x - this.x, mouse.y - this.y],this.dDdtMax)
-            console.log(Math.sqrt(accel[0]*accel[0]+accel[1]*accel[1]))}
+            if (UserInput.keystate("mouse3")) accel = normalizeVector([mouse.x - this.x, mouse.y - this.y],this.dDdtMax)
             this.dx += accel[0]
             this.dy += accel[1]
         }
